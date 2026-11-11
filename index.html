@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newton-Raphson: Root Slayer | Laboratorio Numerico DOOM Edition</title>
+  
+  <!-- CDNs: Bootstrap 5, Plotly, Math.js, KaTeX -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.1/lib/browser/math.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  
+  <!-- Fuentes DOOM y Retro Monospace -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+  <style>
+    @font-face {
+      font-family: "Doom";
+      src: url("https://assets.codepen.io/383755/Upheaval.woff2") format("woff2");
+    }
+
+    /* ==========================================================================
+       DOOM PALETTE & DESIGN SYSTEM
+       ========================================================================== */
+    :root {
+      --doom-bg: #09090b;
+      --doom-surface: #141418;
+      --doom-panel: #1a1a20;
+      --doom-border-outer: #52525e;
+      --doom-border-inner: #272730;
+      --doom-metal-bevel: inset 2px 2px 0px rgba(255,255,255,0.12), inset -2px -2px 0px rgba(0,0,0,0.8);
+      --doom-red: #d82b2b;
+      --doom-blood: #880808;
+      --doom-fire-orange: #ff5500;
+      --doom-yellow: #f9ef51;
+      --doom-toxic-green: #39ff14;
+      --doom-plasma-blue: #00d4ff;
+      --doom-muted: #8e8e9f;
+      --hud-gray: #3a3a42;
+    }
+
+    * {
+      box-sizing: border-box;
+      cursor: crosshair;
+      user-select: none;
+    }
+
+    input, select, textarea, button, code {
+      user-select: text;
+    }
+
+    /* Cero scroll global en viewport */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+      background-color: var(--doom-bg);
+      color: #e5e5eb;
+      font-family: 'Share Tech Mono', monospace;
+      image-rendering: pixelated;
+    }
+
+    /* Escaneo CRT ambiental sutil */
+    body::before {
+      content: " ";
+      display: block;
+      position: fixed;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+      z-index: 9999;
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+      opacity: 0.75;
+    }
+
+    /* Animaciones sutiles de disparo (Screen Shake & Muzzle Flash) */
+    @keyframes screen-kick {
+      0% { transform: translateY(0); }
+      35% { transform: translateY(3px); }
+      100% { transform: translateY(0); }
+    }
+
+    @keyframes muzzle-light {
+      0% { box-shadow: inset 0 0 45px rgba(255, 85, 0, 0.45); }
+      100% { box-shadow: inset 0 0 0 rgba(0, 0, 0, 0); }
+    }
+
+    .firing-kick {
+      animation: screen-kick 0.12s ease-out;
+    }
+
+    .firing-flash {
+      animation: muzzle-light 0.15s ease-out;
+    }
+
+    .victory-pulse {
+      box-shadow: 0 0 20px rgba(57, 255, 20, 0.5) !important;
+      border-color: var(--doom-toxic-green) !important;
+      transition: all 0.4s ease;
+    }
+
+    /* Scrollbars retro estilo DOOM */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0d0d11;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(to bottom, #d82b2b, #f9ef51 75%);
+      box-shadow: inset 1px 1px 0px rgba(255,255,255,0.4);
+    }
+
+    /* Contenedor principal: Ajuste exacto a 100vh */
+    .doom-app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-height: 100vh;
+      width: 100vw;
+      padding: 6px 10px;
+      gap: 6px;
+      transition: border-color 0.3s;
+    }
+
+    /* Cabecera */
+    .doom-header {
+      flex: 0 0 auto;
+      height: 48px;
+      background: linear-gradient(180deg, #24242c 0%, #121217 100%);
+      border: 2px solid var(--doom-border-outer);
+      box-shadow: var(--doom-metal-bevel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+
+    .doom-logo-title {
+      font-family: "Doom", sans-serif;
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--doom-yellow);
+      background-image: linear-gradient(to bottom, #ff3b30 0%, #f9ef51 70%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 2px 2px 0px #000;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .doom-subtitle {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: #b0b0bc;
+      letter-spacing: 0.5px;
+    }
+
+    /* Dashboard Grid de 3 columnas */
+    .doom-main-grid {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 310px 1fr 390px;
+      gap: 8px;
+    }
+
+    @media (max-width: 1200px) {
+      .doom-main-grid {
+        grid-template-columns: 280px 1fr 340px;
+      }
+    }
+
+    .doom-panel-card {
+      background: var(--doom-surface);
+      border: 2px solid #33333d;
+      box-shadow: var(--doom-metal-bevel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .doom-panel-header {
+      background: linear-gradient(180deg, #30303a 0%, #1b1b22 100%);
+      border-bottom: 2px solid #000;
+      padding: 5px 10px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: var(--doom-yellow);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .doom-panel-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 10px;
+      min-height: 0;
+    }
+
+    /* Formularios y Botones */
+    .form-group-doom {
+      margin-bottom: 9px;
+    }
+
+    .doom-label {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      color: #ff9944;
+      margin-bottom: 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .doom-input, .doom-select {
+      background: #09090c;
+      border: 1px solid #4a4a58;
+      border-bottom-color: #6a6a7c;
+      border-right-color: #6a6a7c;
+      color: #39ff14;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 5px 8px;
+      width: 100%;
+      outline: none;
+      box-shadow: inset 2px 2px 4px rgba(0,0,0,0.9);
+      transition: border-color 0.15s;
+    }
+
+    .doom-input:focus, .doom-select:focus {
+      border-color: var(--doom-yellow);
+      box-shadow: inset 1px 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(249, 239, 81, 0.4);
+      color: #fff;
+    }
+
+    .doom-btn {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8.5px;
+      padding: 8px 6px;
+      text-transform: uppercase;
+      border: 2px solid #5a5a68;
+      box-shadow: inset 2px 2px 0px rgba(255,255,255,0.25), inset -2px -2px 0px rgba(0,0,0,0.7), 2px 2px 0px #000;
+      transition: all 0.08s ease;
+      cursor: crosshair;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .doom-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: inset -2px -2px 0px rgba(255,255,255,0.2), inset 2px 2px 0px rgba(0,0,0,0.7);
+    }
+
+    .doom-btn-primary {
+      background: linear-gradient(180deg, #990000 0%, #440000 100%);
+      color: #fff;
+      border-color: #d82b2b;
+    }
+    .doom-btn-primary:hover {
+      background: linear-gradient(180deg, #cc1111 0%, #660000 100%);
+      color: var(--doom-yellow);
+    }
+
+    .doom-btn-action {
+      background: linear-gradient(180deg, #d47000 0%, #663300 100%);
+      color: #fff;
+      border-color: #ff9900;
+    }
+    .doom-btn-action:hover {
+      background: linear-gradient(180deg, #ff8c00 0%, #884400 100%);
+      color: #fff;
+      box-shadow: 0 0 8px rgba(255,140,0,0.5);
+    }
+
+    .doom-btn-secondary {
+      background: linear-gradient(180deg, #3a3a46 0%, #1e1e24 100%);
+      color: #ddd;
+      border-color: #646476;
+    }
+    .doom-btn-secondary:hover {
+      background: #4a4a58;
+      color: #fff;
+    }
+
+    .doom-btn-green {
+      background: linear-gradient(180deg, #187700 0%, #0a3800 100%);
+      color: #39ff14;
+      border-color: #2be800;
+    }
+    .doom-btn-green:hover {
+      background: linear-gradient(180deg, #229900 0%, #0f4d00 100%);
+      color: #fff;
+    }
+
+    .doom-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      filter: grayscale(80%);
+    }
+
+    /* Doomguy status card */
+    .doomguy-box {
+      background: #0c0c10;
+      border: 2px solid #383844;
+      box-shadow: inset 0 0 10px #000;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .doomguy-face {
+      width: 52px;
+      height: 52px;
+      background-color: #555;
+      background-image: url("https://assets.codepen.io/383755/grin-doomguy.gif");
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      border: 2px solid #000;
+      box-shadow: 0 0 0 2px #555;
+      flex-shrink: 0;
+      image-rendering: pixelated;
+    }
+
+    .doomguy-stats {
+      flex: 1;
+      font-size: 11px;
+    }
+
+    .progress-doom {
+      height: 12px;
+      background: #111;
+      border: 1px solid #444;
+      position: relative;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .progress-doom-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #d82b2b, #ff8c00, #39ff14);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Arena Grafica */
+    .arena-panel {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    #graph-container {
+      flex: 1 1 auto;
+      width: 100%;
+      min-height: 0;
+      background-color: #0b0b0f;
+    }
+
+    .graph-hud-overlay {
+      position: absolute;
+      top: 36px;
+      right: 14px;
+      background: rgba(14, 14, 20, 0.92);
+      border: 1px solid #444455;
+      backdrop-filter: blur(4px);
+      padding: 6px 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #e0e0e0;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+      line-height: 1.4;
+    }
+
+    .graph-hud-overlay .val-active {
+      color: var(--doom-yellow);
+      font-weight: bold;
+    }
+
+    .legend-bar {
+      flex: 0 0 auto;
+      background: #14141a;
+      border-top: 1px solid #2e2e38;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: space-around;
+      font-size: 9.5px;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+    }
+
+    /* Columna Derecha */
+    .right-column-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .step-narrator-panel {
+      flex: 0 0 48%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .table-panel {
+      flex: 1 1 52%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .math-formula-box {
+      background: #0c0c12;
+      border: 1px solid #343444;
+      border-left: 4px solid var(--doom-yellow);
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      overflow-x: auto;
+      color: #fff;
+    }
+
+    .narrative-text {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #d1d1dc;
+    }
+
+    .narrative-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #252530;
+      border: 1px solid #48485a;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7.5px;
+      color: var(--doom-yellow);
+      margin-bottom: 6px;
+    }
+
+    /* Tabla Retro DOOM */
+    .doom-table-wrapper {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overflow-x: auto;
+      min-height: 0;
+      border: 1px solid #2c2c36;
+    }
+
+    .doom-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      color: #ddd;
+      text-align: right;
+    }
+
+    .doom-table th {
+      background: #1f1f28;
+      color: #ff9944;
+      padding: 5px 6px;
+      position: sticky;
+      top: 0;
+      border-bottom: 2px solid #444;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      font-size: 11px;
+      text-align: right;
+      z-index: 2;
+    }
+    .doom-table th:first-child, .doom-table td:first-child {
+      text-align: center;
+    }
+
+    .doom-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #1a1a24;
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .doom-table tr:hover {
+      background: rgba(255, 140, 0, 0.12);
+    }
+
+    .doom-table tr.active-step {
+      background: rgba(216, 43, 43, 0.28);
+      color: var(--doom-yellow);
+      font-weight: bold;
+      border-left: 3px solid var(--doom-yellow);
+    }
+
+    .badge-digits {
+      font-size: 8px;
+      background: #1e1e28;
+      color: #39ff14;
+      border: 1px solid #335533;
+      padding: 1px 4px;
+      margin-left: 4px;
+    }
+
+    /* Modales de Alerta */
+    .doom-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.85);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(5px);
+    }
+
+    .doom-modal-box {
+      width: 90%;
+      max-width: 520px;
+      background: #181820;
+      border: 3px solid var(--doom-red);
+      box-shadow: 0 0 25px rgba(216, 43, 43, 0.6), inset 0 0 15px rgba(0,0,0,0.8);
+      padding: 20px;
+      position: relative;
+    }
+
+    .doom-modal-title {
+      font-family: "Doom", sans-serif;
+      font-size: 30px;
+      color: var(--doom-yellow);
+      margin-bottom: 10px;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* HUD Inferior de DOOM */
+    .doom-hud-bottom {
+      flex: 0 0 auto;
+      height: 48px;
+      background: #25252c;
+      border: 2px solid #4a4a58;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.2), 0 -2px 10px rgba(0,0,0,0.8);
+      display: grid;
+      grid-template-columns: 140px 140px 170px 1fr 140px;
+      align-items: stretch;
+      padding: 2px;
+      gap: 3px;
+    }
+
+    .hud-block {
+      background: #0a0a0f;
+      border: 1px solid #3d3d4b;
+      box-shadow: inset 1px 1px 3px rgba(0,0,0,0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+    }
+
+    .hud-block-label {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      color: #9999a8;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .hud-block-value {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 13px;
+      color: var(--doom-red);
+      text-shadow: 0 0 5px rgba(216,43,43,0.7);
+    }
+
+    .hud-block-value.green {
+      color: var(--doom-toxic-green);
+      text-shadow: 0 0 5px rgba(57,255,20,0.7);
+    }
+    .hud-block-value.yellow {
+      color: var(--doom-yellow);
+      text-shadow: 0 0 5px rgba(249,239,81,0.7);
+    }
+    .hud-block-value.blue {
+      color: var(--doom-plasma-blue);
+      text-shadow: 0 0 5px rgba(0,212,255,0.7);
+    }
+
+    .sound-toggle-btn {
+      background: transparent;
+      border: 1px solid #444;
+      color: #bbb;
+      font-size: 8.5px;
+      font-family: 'Press Start 2P', monospace;
+      padding: 3px 6px;
+      cursor: crosshair;
+    }
+    .sound-toggle-btn.active {
+      color: var(--doom-yellow);
+      border-color: var(--doom-yellow);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="doom-app-container" id="app-container">
+
+    <!-- CABECERA -->
+    <header class="doom-header">
+      <div class="d-flex align-items-center gap-3">
+        <h1 class="doom-logo-title">NEWTON-RAPHSON</h1>
+        <span class="doom-subtitle d-none d-md-inline">ROOT SLAYER // METODOS NUMERICOS E1M1</span>
+      </div>
+      
+      <div class="d-flex align-items-center gap-2">
+        <button id="btn-sound-toggle" class="sound-toggle-btn active" title="Alternar FX de audio 8-bit">
+          [SFX: ON]
+        </button>
+        <span class="badge bg-danger text-uppercase font-monospace" style="font-size: 9px; letter-spacing: 1px;">
+          CONVERGENCIA CUADRATICA O(h&sup2;)
+        </span>
+      </div>
+    </header>
+
+    <!-- CUERPO PRINCIPAL DEL DASHBOARD -->
+    <main class="doom-main-grid">
+
+      <!-- ========================================== -->
+      <!-- COL 1: PANEL DE ENTRADAS & CONTROL MISSION -->
+      <!-- ========================================== -->
+      <section class="doom-panel-card">
+        <div class="doom-panel-header">
+          <span>[SETUP] Arsenal de Entrada</span>
+          <span class="text-danger" style="font-size: 8px;">[MISSION SETUP]</span>
+        </div>
+        <div class="doom-panel-body">
+          
+          <!-- Selector de preajustes -->
+          <div class="form-group-doom">
+            <label class="doom-label" for="preset-select">
+              <span>PREAJUSTES DEMO</span>
+              <span class="text-muted">[CASOS]</span>
+            </label>
+            <select id="preset-select" class="doom-select">
+              <option value="custom">-- Personalizado --</option>
+              <option value="p1" selected>x^2 - 4 (Raiz clasica x = 2)</option>
+              <option value="p2">x^3 - 2*x - 5 (Polinomio cubico x approx 2.094)</option>
+              <option value="p3">cos(x) - x (Trascendente x approx 0.739)</option>
+              <option value="p4">exp(-x) - x (Exponencial x approx 0.567)</option>
+              <option value="p5">x^3 - x - 1 (Numero de Plastico x approx 1.324)</option>
+              <option value="trap">x^3 - 2*x + 2 (Trampa: Ciclo oscilante)</option>
+              <option value="fail">x^3 - 3*x + 2 (Punto critico f'(x) = 0)</option>
+            </select>
+          </div>
+
+          <!-- Funcion f(x) -->
+          <div class="form-group-doom">
+            <label class="doom-label" for="input-fx">
+              <span>FUNCION f(x)</span>
+              <span class="text-warning">y = f(x)</span>
+            </label>
+            <input type="text" id="input-fx" class="doom-input" value="x^2 - 4" placeholder="ej: x^2 - 4, cos(x) - x">
+          </div>
+
+          <!-- Derivada f'(x) -->
+          <div class="form-group-doom">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="doom-label m-0" for="input-dfx">
+                <span>DERIVADA f'(x)</span>
+                <span class="text-danger">Pendiente</span>
+              </label>
+              <button id="btn-auto-diff" class="btn btn-sm py-0 px-2 btn-outline-warning" style="font-size: 8px; font-family: 'Press Start 2P';" title="Derivar automaticamente con math.js">
+                [AUTO]
+              </button>
+            </div>
+            <input type="text" id="input-dfx" class="doom-input" value="2*x" placeholder="ej: 2*x, -sin(x) - 1">
+          </div>
+
+          <!-- x0 y Tolerancia -->
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="doom-label" for="input-x0">X0 INICIAL</label>
+              <input type="number" step="any" id="input-x0" class="doom-input" value="6.0">
+            </div>
+            <div class="col-6">
+              <label class="doom-label" for="input-tol">TOLERANCIA (EPS)</label>
+              <input type="number" step="any" id="input-tol" class="doom-input" value="0.0001">
+            </div>
+          </div>
+
+          <!-- Max Iteraciones -->
+          <div class="form-group-doom">
+            <label class="doom-label" for="input-max-iter">MAX. ITERACIONES</label>
+            <input type="number" id="input-max-iter" class="doom-input" value="15" min="1" max="50">
+          </div>
+
+          <!-- Botones de accion -->
+          <div class="d-grid gap-2 mt-2">
+            <button id="btn-start" class="doom-btn doom-btn-primary">
+              [+] INICIAR ANALISIS
+            </button>
+            
+            <div class="d-flex gap-2">
+              <button id="btn-next" class="doom-btn doom-btn-action flex-fill" disabled>
+                [>>] DISPARAR PASO
+              </button>
+              <button id="btn-auto" class="doom-btn doom-btn-green" disabled title="Ejecutar todas las iteraciones en rafaga">
+                AUTO
+              </button>
+            </div>
+
+            <button id="btn-reset" class="doom-btn doom-btn-secondary">
+              [R] REINICIAR ARSENAL
+            </button>
+          </div>
+
+          <!-- Avatar Doomguy y barra de precision -->
+          <div class="doomguy-box">
+            <div id="doomguy-face" class="doomguy-face" title="Estado del Doom Slayer"></div>
+            <div class="doomguy-stats">
+              <div class="d-flex justify-content-between text-white" style="font-size: 8px; font-family: 'Press Start 2P';">
+                <span>ESTADO:</span>
+                <span id="doomguy-status-text" class="text-warning">LISTO</span>
+              </div>
+              <div class="progress-doom" title="Nivel de precision alcanzado">
+                <div id="doom-health-bar" class="progress-doom-bar"></div>
+              </div>
+              <div class="d-flex justify-content-between mt-1 text-muted" style="font-size: 8px;">
+                <span>ERROR %:</span>
+                <span id="hud-error-pct" class="text-white">---</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- COL 2: ARENA GRAFICA                       -->
+      <!-- ========================================== -->
+      <section class="doom-panel-card arena-panel" id="arena-card">
+        <div class="doom-panel-header">
+          <span>[PLOT] Arena Grafica: Curva y Tangentes</span>
+          <span class="badge bg-dark text-warning border border-secondary" style="font-size: 7.5px; font-family: 'Share Tech Mono';">
+            CLICK EN CURVA = APUNTAR X0
+          </span>
+        </div>
+
+        <!-- Overlay de inspeccion en vivo -->
+        <div class="graph-hud-overlay">
+          <div>Iter actual (n): <span id="hud-overlay-iter" class="val-active">0</span></div>
+          <div>Punto actual x<sub>n</sub>: <span id="hud-overlay-xn" class="val-active">---</span></div>
+          <div>f(x<sub>n</sub>): <span id="hud-overlay-fxn" class="val-active">---</span></div>
+          <div>Pendiente f'(x<sub>n</sub>): <span id="hud-overlay-dfxn" class="val-active">---</span></div>
+          <div>Corte x<sub>n+1</sub>: <span id="hud-overlay-nextx" style="color: var(--doom-toxic-green); font-weight: bold;">---</span></div>
+        </div>
+
+        <!-- Contenedor Plotly -->
+        <div id="graph-container"></div>
+
+        <!-- Barra de leyendas -->
+        <div class="legend-bar">
+          <div class="legend-item text-info">
+            <span class="legend-dot" style="background: var(--doom-plasma-blue);"></span> f(x) Curva
+          </div>
+          <div class="legend-item" style="color: var(--doom-fire-orange);">
+            <span class="legend-dot" style="background: var(--doom-fire-orange);"></span> Recta Tangente
+          </div>
+          <div class="legend-item" style="color: var(--doom-yellow);">
+            <span class="legend-dot" style="background: var(--doom-yellow); border-radius: 50%;"></span> Proyeccion x<sub>n+1</sub>
+          </div>
+          <div class="legend-item" style="color: var(--doom-toxic-green);">
+            <span class="legend-dot" style="background: var(--doom-toxic-green); border-radius: 50%;"></span> Raiz Slayed
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- COL 3: EXPLICACION DIDACTICA & REGISTRO   -->
+      <!-- ========================================== -->
+      <div class="right-column-container">
+
+        <!-- Explicador didactico -->
+        <section class="doom-panel-card step-narrator-panel">
+          <div class="doom-panel-header">
+            <span>[RADAR] Radar Didactico</span>
+            <span id="step-counter-tag" class="text-warning" style="font-size: 8px;">PASO: 0</span>
+          </div>
+          <div class="doom-panel-body">
+            
+            <span id="narrative-tag" class="narrative-badge">INSTRUCCION TACTICA</span>
+            
+            <!-- Caja de formulas dinamicas con KaTeX -->
+            <div id="math-formula-container" class="math-formula-box">
+              <!-- Render dinamico KaTeX -->
+            </div>
+
+            <div id="narrative-content" class="narrative-text">
+              Presiona <strong>"INICIAR ANALISIS"</strong> para calibrar el disparo en x<sub>0</sub> o <strong>haz clic directamente sobre la curva</strong> para apuntar. 
+              El Metodo de Newton-Raphson utiliza la recta tangente en (x<sub>n</sub>, f(x<sub>n</sub>)) como aproximacion lineal local para proyectar la siguiente aproximacion de la raiz sobre el eje horizontal X.
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Registro de iteraciones -->
+        <section class="doom-panel-card table-panel">
+          <div class="doom-panel-header">
+            <span>[DATA] Registro de Iteraciones</span>
+            <button id="btn-copy-latex" class="btn btn-sm py-0 px-2 btn-outline-warning" style="font-size: 7.5px; font-family: 'Press Start 2P';" title="Copiar matriz en formato LaTeX para informes academicos">
+              [COPIAR LATEX]
+            </button>
+          </div>
+          <div class="doom-panel-body p-0 d-flex flex-column">
+            <div class="doom-table-wrapper">
+              <table class="doom-table" id="iterations-table">
+                <thead>
+                  <tr>
+                    <th title="Numero de Iteracion">n</th>
+                    <th title="Aproximacion actual">x<sub>n</sub></th>
+                    <th title="Valor de la funcion">f(x<sub>n</sub>)</th>
+                    <th title="Derivada en xn">f'(x<sub>n</sub>)</th>
+                    <th title="Siguiente estimacion">x<sub>n+1</sub></th>
+                    <th title="Error relativo porcentual">Error %</th>
+                  </tr>
+                </thead>
+                <tbody id="table-body">
+                  <!-- Filas dinamicas -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- STATUS BAR INFERIOR ESTILO DOOM            -->
+    <!-- ========================================== -->
+    <footer class="doom-hud-bottom">
+      
+      <div class="hud-block">
+        <span class="hud-block-label">ITERACION</span>
+        <span id="hud-ammo-val" class="hud-block-value">00 / 15</span>
+      </div>
+
+      <div class="hud-block">
+        <span class="hud-block-label">PRECISION</span>
+        <span id="hud-accuracy-val" class="hud-block-value yellow">0.0%</span>
+      </div>
+
+      <div class="hud-block">
+        <span class="hud-block-label">PRECISION CUADRATICA</span>
+        <span id="hud-decimals-val" class="hud-block-value blue">0 DIGITOS</span>
+      </div>
+
+      <div class="hud-block">
+        <span class="hud-block-label">ESTIMADO RAIZ (X)</span>
+        <span id="hud-root-val" class="hud-block-value green">A LA ESPERA</span>
+      </div>
+
+      <div class="hud-block">
+        <span class="hud-block-label">ESTADO RED</span>
+        <span id="hud-state-val" class="hud-block-value yellow">STANDBY</span>
+      </div>
+
+    </footer>
+
+  </div>
+
+  <!-- MODAL DE ALERTAS Y CASOS DE FALLA -->
+  <div id="doom-modal" class="doom-modal-overlay">
+    <div class="doom-modal-box">
+      <h2 id="modal-title" class="doom-modal-title">FALLO CRITICO</h2>
+      <div id="modal-body" class="mb-4 text-light" style="font-size: 13px; line-height: 1.6; font-family: 'Share Tech Mono', monospace;">
+        <!-- Mensaje de alerta -->
+      </div>
+      <div class="d-flex justify-content-end">
+        <button id="modal-btn-close" class="doom-btn doom-btn-primary px-4">
+          ENTENDIDO [SALIR]
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       LOGICA MATEMATICA Y MOTOR EDUCATIVO
+       ========================================================================== -->
+  <script>
+    // --- 1. GESTOR DE AUDIO RETRO 8-BIT SINTETIZADO ---
+    class DoomSoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+      }
+
+      playShot() {
+        if (!this.enabled) return;
+        this.init();
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.15);
+        } catch(e) {}
+      }
+
+      playVictory() {
+        if (!this.enabled) return;
+        this.init();
+        try {
+          const notes = [261.63, 329.63, 392.00, 523.25];
+          notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.1);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime + i * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (i + 1) * 0.15);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + i * 0.1);
+            osc.stop(this.ctx.currentTime + (i + 1) * 0.15);
+          });
+        } catch(e) {}
+      }
+
+      playAlarm() {
+        if (!this.enabled) return;
+        this.init();
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+          osc.frequency.setValueAtTime(440, this.ctx.currentTime + 0.1);
+          osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.2);
+          gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.3);
+        } catch(e) {}
+      }
+    }
+
+    const sound = new DoomSoundEngine();
+    document.getElementById('btn-sound-toggle').addEventListener('click', function() {
+      sound.enabled = !sound.enabled;
+      this.classList.toggle('active', sound.enabled);
+      this.innerHTML = sound.enabled ? '[SFX: ON]' : '[SFX: OFF]';
+    });
+
+    // --- 2. ESTADO GLOBAL ---
+    const State = {
+      fnStr: "x^2 - 4",
+      dfnStr: "2*x",
+      compiledF: null,
+      compiledDF: null,
+      x0: 6.0,
+      tol: 0.0001,
+      maxIter: 15,
+      currentIter: 0,
+      currentXn: 6.0,
+      history: [],
+      isRunning: false,
+      isConverged: false,
+      isFailed: false,
+      autoTimer: null
+    };
+
+    const PRESETS = {
+      p1: { f: "x^2 - 4", df: "2*x", x0: 6.0, tol: 0.0001 },
+      p2: { f: "x^3 - 2*x - 5", df: "3*x^2 - 2", x0: 4.0, tol: 0.0001 },
+      p3: { f: "cos(x) - x", df: "-sin(x) - 1", x0: 2.0, tol: 0.0001 },
+      p4: { f: "exp(-x) - x", df: "-exp(-x) - 1", x0: 2.0, tol: 0.0001 },
+      p5: { f: "x^3 - x - 1", df: "3*x^2 - 1", x0: 2.5, tol: 0.0001 },
+      trap: { f: "x^3 - 2*x + 2", df: "3*x^2 - 2", x0: 0.0, tol: 0.0001 },
+      fail: { f: "x^3 - 3*x + 2", df: "3*x^2 - 3", x0: 1.0, tol: 0.0001 }
+    };
+
+    // --- 3. CONFIGURACION DE PLOTLY CON CLICK-TO-AIM ---
+    function initPlot() {
+      const container = document.getElementById('graph-container');
+      const layout = {
+        paper_bgcolor: '#0c0c10',
+        plot_bgcolor: '#08080b',
+        margin: { l: 45, r: 25, t: 25, b: 35 },
+        xaxis: {
+          title: { text: 'Eje X (Aproximaciones de la Raiz)', font: { family: 'Share Tech Mono', color: '#ff9944', size: 11 } },
+          zeroline: true,
+          zerolinecolor: '#888899',
+          zerolinewidth: 2,
+          gridcolor: '#1a1a24',
+          tickfont: { family: 'Share Tech Mono', color: '#9999a8', size: 10 }
+        },
+        yaxis: {
+          title: { text: 'Eje Y : f(x)', font: { family: 'Share Tech Mono', color: '#ff9944', size: 11 } },
+          zeroline: true,
+          zerolinecolor: '#888899',
+          zerolinewidth: 2,
+          gridcolor: '#1a1a24',
+          tickfont: { family: 'Share Tech Mono', color: '#9999a8', size: 10 }
+        },
+        showlegend: false,
+        hovermode: 'closest'
+      };
+
+      Plotly.newPlot(container, [], layout, { responsive: true, displayModeBar: false }).then(() => {
+        // Feature Sutil 1: Click en la curva para apuntar x0
+        container.on('plotly_click', function(data) {
+          if (data && data.points && data.points.length > 0) {
+            const pt = data.points[0];
+            const clickedX = Number(pt.x.toFixed(3));
+            document.getElementById('input-x0').value = clickedX;
+            State.x0 = clickedX;
+            resetMission();
+            document.getElementById('input-x0').value = clickedX;
+            startMission();
+          }
+        });
+      });
+    }
+
+    // --- 4. COMPILACION MATEMATICA CON MATH.JS ---
+    function compileMath() {
+      try {
+        State.compiledF = math.compile(State.fnStr);
+      } catch (err) {
+        showErrorModal("Error de Sintaxis en f(x)", `La expresion matematica de <code>f(x)</code> no es valida.<br><br>Detalle: <span class="text-danger">${err.message}</span>`);
+        return false;
+      }
+
+      try {
+        State.compiledDF = math.compile(State.dfnStr);
+      } catch (err) {
+        showErrorModal("Error de Sintaxis en f'(x)", `La expresion matematica de la derivada <code>f'(x)</code> no es valida.<br><br>Detalle: <span class="text-danger">${err.message}</span>`);
+        return false;
+      }
+
+      return true;
+    }
+
+    function evaluateF(xVal) {
+      try { return State.compiledF.evaluate({ x: xVal }); } catch (e) { return NaN; }
+    }
+
+    function evaluateDF(xVal) {
+      try { return State.compiledDF.evaluate({ x: xVal }); } catch (e) { return NaN; }
+    }
+
+    function autoDifferentiate() {
+      const fExpr = document.getElementById('input-fx').value.trim();
+      if (!fExpr) return;
+      try {
+        const derived = math.derivative(fExpr, 'x');
+        const simplified = math.simplify(derived).toString();
+        document.getElementById('input-dfx').value = simplified;
+        renderMathFormulaStatic(`f'(x) = ${simplified}`);
+      } catch (e) {
+        console.warn("Auto-derivada manual requerida:", e);
+      }
+    }
+
+    // --- 5. RENDERIZADO VISUAL DEL PLANO Y RECTAS TANGENTES ---
+    function updatePlotFull(activeTangent = null, activeDashed = null, activeRoot = null) {
+      const container = document.getElementById('graph-container');
+
+      let minX = State.x0 - 3;
+      let maxX = State.x0 + 3;
+
+      State.history.forEach(h => {
+        if (h.xn < minX) minX = h.xn - 2;
+        if (h.xn > maxX) maxX = h.xn + 2;
+        if (h.nextX < minX) minX = h.nextX - 2;
+        if (h.nextX > maxX) maxX = h.nextX + 2;
+      });
+
+      if (minX > -2) minX = -2;
+      if (maxX < 2) maxX = 2;
+
+      const padding = Math.max(1, (maxX - minX) * 0.2);
+      minX -= padding;
+      maxX += padding;
+
+      // Generar puntos de la curva f(x)
+      const samples = 400;
+      const step = (maxX - minX) / samples;
+      const xVals = [];
+      const yVals = [];
+
+      for (let i = 0; i <= samples; i++) {
+        const x = minX + i * step;
+        const y = evaluateF(x);
+        if (!isNaN(y) && isFinite(y) && Math.abs(y) < 10000) {
+          xVals.push(x);
+          yVals.push(y);
+        } else {
+          xVals.push(x);
+          yVals.push(null);
+        }
+      }
+
+      const traceFx = {
+        x: xVals,
+        y: yVals,
+        mode: 'lines',
+        name: 'f(x)',
+        line: { color: '#00d4ff', width: 3 },
+        hoverinfo: 'x+y'
+      };
+
+      const traces = [traceFx];
+
+      // Tangentes historicas previas tenues
+      State.history.forEach((stepItem, idx) => {
+        if (idx !== State.history.length - 1) {
+          traces.push({
+            x: [stepItem.xn, stepItem.nextX],
+            y: [stepItem.fxn, 0],
+            mode: 'lines',
+            line: { color: 'rgba(216, 43, 43, 0.35)', width: 1.5, dash: 'dot' },
+            hoverinfo: 'none'
+          });
+        }
+      });
+
+      // Tangente activa destacada
+      if (activeTangent) {
+        traces.push({
+          x: activeTangent.x,
+          y: activeTangent.y,
+          mode: 'lines+markers',
+          name: 'Tangente activa',
+          line: { color: '#ff5500', width: 3.5 },
+          marker: { size: [8, 7], color: ['#ffff00', '#ff5500'] }
+        });
+      }
+
+      // Proyeccion vertical punteada
+      if (activeDashed) {
+        traces.push({
+          x: activeDashed.x,
+          y: activeDashed.y,
+          mode: 'lines+markers',
+          name: 'Proyeccion a curva',
+          line: { color: '#f9ef51', width: 2, dash: 'dash' },
+          marker: { size: 6, color: '#f9ef51' }
+        });
+      }
+
+      // Marcador de raiz encontrada
+      if (activeRoot) {
+        traces.push({
+          x: [activeRoot.x],
+          y: [activeRoot.y],
+          mode: 'markers+text',
+          name: 'Raiz Slayed',
+          text: [`RAIZ: ${activeRoot.x.toFixed(5)}`],
+          textposition: 'top center',
+          textfont: { family: 'Share Tech Mono', size: 12, color: '#39ff14' },
+          marker: { size: 16, color: '#39ff14', symbol: 'cross', line: { color: '#fff', width: 2 } }
+        });
+      }
+
+      const ptsX = State.history.map(h => h.xn);
+      const ptsY = State.history.map(h => h.fxn);
+      if (ptsX.length > 0) {
+        traces.push({
+          x: ptsX,
+          y: ptsY,
+          mode: 'markers',
+          marker: { size: 7, color: '#f9ef51', symbol: 'circle' }
+        });
+      }
+
+      Plotly.react(container, traces, Object.assign({}, container.layout, {
+        'xaxis.range': [minX, maxX],
+        'yaxis.autorange': true
+      }));
+    }
+
+    // --- 6. RENDERIZADOR MATEMATICO KATEX ---
+    function renderMathFormulaIteration(n, xn, fxn, dfxn, nextX) {
+      const container = document.getElementById('math-formula-container');
+      const latex = `
+        x_{${n+1}} = x_{${n}} - \\frac{f(x_{${n}})}{f'(x_{${n}})} 
+        \\implies x_{${n+1}} = ${xn.toFixed(5)} - \\frac{${fxn.toFixed(5)}}{${dfxn.toFixed(5)}} = \\mathbf{${nextX.toFixed(5)}}
+      `;
+      katex.render(latex, container, { throwOnError: false, displayMode: true });
+    }
+
+    function renderMathFormulaStatic(text) {
+      const container = document.getElementById('math-formula-container');
+      katex.render(text, container, { throwOnError: false, displayMode: true });
+    }
+
+    // --- 7. EJECUCION DE NEWTON-RAPHSON ---
+    function startMission() {
+      State.fnStr = document.getElementById('input-fx').value.trim();
+      State.dfnStr = document.getElementById('input-dfx').value.trim();
+      State.x0 = parseFloat(document.getElementById('input-x0').value);
+      State.tol = parseFloat(document.getElementById('input-tol').value);
+      State.maxIter = parseInt(document.getElementById('input-max-iter').value, 10);
+
+      if (isNaN(State.x0) || isNaN(State.tol) || State.tol <= 0) {
+        showErrorModal("Parametros Invalidos", "Por favor ingresa numeros validos para X0 y la tolerancia.");
+        return;
+      }
+
+      if (!compileMath()) return;
+
+      State.currentIter = 0;
+      State.currentXn = State.x0;
+      State.history = [];
+      State.isRunning = true;
+      State.isConverged = false;
+      State.isFailed = false;
+
+      document.getElementById('table-body').innerHTML = '';
+      document.getElementById('btn-next').disabled = false;
+      document.getElementById('btn-auto').disabled = false;
+      document.getElementById('btn-start').disabled = true;
+
+      document.getElementById('app-container').classList.remove('victory-pulse');
+      document.getElementById('hud-state-val').innerText = 'BUSCANDO';
+      document.getElementById('hud-state-val').className = 'hud-block-value yellow';
+      document.getElementById('hud-ammo-val').innerText = `00 / ${String(State.maxIter).padStart(2,'0')}`;
+      document.getElementById('hud-decimals-val').innerText = '0 DIGITOS';
+      
+      setDoomguyMood('normal', 'OBJETIVO FIJADO');
+
+      const f0 = evaluateF(State.x0);
+      const df0 = evaluateDF(State.x0);
+
+      renderMathFormulaStatic(`f(x) = ${State.fnStr} \\quad | \\quad x_0 = ${State.x0}`);
+
+      document.getElementById('narrative-tag').innerText = `CALIBRACION INICIAL: x0 = ${State.x0}`;
+      document.getElementById('step-counter-tag').innerText = `PASO: 0`;
+      document.getElementById('narrative-content').innerHTML = `
+        Se ha fijado el punto inicial <span class="text-warning">x<sub>0</sub> = ${State.x0}</span> donde la funcion vale 
+        <span class="text-info">f(x<sub>0</sub>) = ${isNaN(f0) ? 'NaN' : f0.toFixed(5)}</span> y la pendiente es 
+        <span class="text-danger">f'(x<sub>0</sub>) = ${isNaN(df0) ? 'NaN' : df0.toFixed(5)}</span>.<br><br>
+        Presiona <strong>"[>>] DISPARAR PASO"</strong> para trazar la primera tangente y obtener x<sub>1</sub>.
+      `;
+
+      updateHUDOverlay(0, State.x0, f0, df0, null);
+      updatePlotFull();
+      sound.playShot();
+    }
+
+    function executeNextStep() {
+      if (!State.isRunning || State.isConverged || State.isFailed) return;
+
+      const n = State.currentIter;
+      const xn = State.currentXn;
+      const fxn = evaluateF(xn);
+      const dfxn = evaluateDF(xn);
+
+      // CASO DE FALLA DIDACTICO: DERIVADA CERO
+      if (Math.abs(dfxn) < 1e-12 || isNaN(dfxn)) {
+        handleDerivativeZeroFailure(n, xn, fxn, dfxn);
+        return;
+      }
+
+      // FORMULA DE RECURRENCIA: x_{n+1} = x_n - f(x_n)/f'(x_n)
+      const nextX = xn - (fxn / dfxn);
+
+      // ERROR RELATIVO PORCENTUAL
+      let errorPct = 100;
+      if (n > 0 || State.history.length > 0) {
+        errorPct = Math.abs((nextX - xn) / (nextX === 0 ? 1 : nextX)) * 100;
+      }
+
+      // Feature Sutil 3: Calculo de digitos correctos ganados (Convergencia Cuadratica)
+      const fxNext = evaluateF(nextX);
+      const correctDecimals = Math.max(0, Math.min(15, Math.floor(-Math.log10(Math.max(1e-15, Math.abs(fxNext))))));
+
+      const record = { n, xn, fxn, dfxn, nextX, errorPct, correctDecimals };
+      State.history.push(record);
+
+      // Feature Sutil 2: Micro-Recoil & Muzzle Flash en la Arena Grafica
+      const arena = document.getElementById('arena-card');
+      arena.classList.remove('firing-kick', 'firing-flash');
+      void arena.offsetWidth; // trigger reflow
+      arena.classList.add('firing-kick', 'firing-flash');
+
+      sound.playShot();
+      appendTableRow(record);
+      renderMathFormulaIteration(n, xn, fxn, dfxn, nextX);
+
+      document.getElementById('step-counter-tag').innerText = `ITER: ${n + 1}`;
+      document.getElementById('narrative-tag').innerText = `ANALISIS DE LA ITERACION ${n + 1}`;
+      
+      document.getElementById('narrative-content').innerHTML = `
+        <strong>1. Evaluacion Local:</strong> Evaluamos el punto actual (x<sub>${n}</sub>, f(x<sub>${n}</sub>)) = (${xn.toFixed(4)}, ${fxn.toFixed(4)}).<br>
+        <strong>2. Recta Tangente:</strong> Trazamos la recta con pendiente m = f'(${xn.toFixed(4)}) = ${dfxn.toFixed(4)}.<br>
+        <strong>3. Proyeccion al Eje X:</strong> La recta corta al eje en el nuevo punto 
+        <span class="text-warning fw-bold">x<sub>${n+1}</sub> = ${nextX.toFixed(5)}</span>.<br>
+        <strong>4. Nuevo Residuo:</strong> El valor funcional desciende a f(x<sub>${n+1}</sub>) = ${fxNext.toFixed(5)}. 
+        <span class="badge bg-dark text-info border border-secondary mt-1 d-inline-block">Precision: ~${correctDecimals} cifras exactas</span>
+      `;
+
+      const activeTangent = { x: [xn, nextX], y: [fxn, 0] };
+      const activeDashed = { x: [nextX, nextX], y: [0, fxNext] };
+
+      updateHUDOverlay(n + 1, xn, fxn, dfxn, nextX);
+      updateHUDValues(n + 1, nextX, dfxn, errorPct, correctDecimals);
+
+      // CRITERIO DE PARADA POR TOLERANCIA
+      const reachedTol = Math.abs(fxNext) < State.tol || errorPct < (State.tol * 100);
+      
+      if (reachedTol) {
+        State.isConverged = true;
+        setDoomguyMood('god', 'RAIZ ENCONTRADA!');
+        sound.playVictory();
+        
+        // Feature Sutil 5: Pulso verde sutil de victoria en el marco
+        document.getElementById('app-container').classList.add('victory-pulse');
+
+        document.getElementById('hud-state-val').innerText = 'CONVERGIO';
+        document.getElementById('hud-state-val').className = 'hud-block-value green';
+        document.getElementById('hud-root-val').innerText = nextX.toFixed(6);
+
+        document.getElementById('narrative-tag').className = 'narrative-badge bg-success text-white';
+        document.getElementById('narrative-tag').innerText = `CONVERGENCIA ALCANZADA`;
+        document.getElementById('narrative-content').innerHTML += `
+          <div class="alert alert-success mt-2 py-1 px-2 border-0" style="font-size: 11px; background: rgba(57, 255, 20, 0.2); color: #39ff14;">
+            * Tolerancia alcanzada: eps = ${State.tol}<br>
+            <strong>Raiz aproximada:</strong> x* = <strong>${nextX.toFixed(7)}</strong><br>
+            <strong>Residuo f(x*):</strong> ${fxNext.toExponential(4)}<br>
+            <strong>Convergencia:</strong> Los decimales se duplicaron cuadraticamente O(h&sup2;)
+          </div>
+        `;
+
+        updatePlotFull(activeTangent, activeDashed, { x: nextX, y: 0 });
+        finishExecution();
+        return;
+      }
+
+      State.currentIter++;
+      State.currentXn = nextX;
+
+      // DETECCION DE LIMITE DE ITERACIONES
+      if (State.currentIter >= State.maxIter) {
+        State.isFailed = true;
+        setDoomguyMood('hurt', 'MAX ITER ALCANZADO');
+        sound.playAlarm();
+
+        document.getElementById('hud-state-val').innerText = 'DIVERGENCIA';
+        document.getElementById('hud-state-val').className = 'hud-block-value text-danger';
+
+        showErrorModal(
+          "Limite de Iteraciones Alcanzado",
+          `El metodo alcanzo las <strong>${State.maxIter}</strong> iteraciones sin alcanzar la tolerancia requerida (&epsilon; = ${State.tol}).<br><br>
+           <strong>Causas didacticas comunes:</strong>
+           <ul>
+             <li>El punto inicial x0 esta demasiado lejos de la raiz real.</li>
+             <li>La funcion posee comportamiento oscilatorio o asintotico.</li>
+             <li>Prueba ajustando el punto inicial x0 o ampliando el numero de iteraciones.</li>
+           </ul>`
+        );
+
+        updatePlotFull(activeTangent, activeDashed);
+        finishExecution();
+        return;
+      }
+
+      setDoomguyMood('normal', errorPct < 5 ? 'CASI CERCA' : 'ACERCANDOSE');
+      updatePlotFull(activeTangent, activeDashed);
+    }
+
+    function handleDerivativeZeroFailure(n, xn, fxn, dfxn) {
+      State.isFailed = true;
+      setDoomguyMood('dead', 'PENDIENTE NULA');
+      sound.playAlarm();
+
+      document.getElementById('hud-state-val').innerText = 'ERROR f\'=0';
+      document.getElementById('hud-state-val').className = 'hud-block-value text-danger';
+
+      const alertHtml = `
+        <div class="text-danger fw-bold mb-2">DIVISION POR CERO: f'(x<sub>${n}</sub>) &asymp; 0</div>
+        En la iteracion <strong>n = ${n}</strong> con x<sub>${n}</sub> = ${xn.toFixed(5)}, la derivada vale cero (f'(x) = ${dfxn}).<br><br>
+        <strong>Por que falla el Metodo de Newton-Raphson aqui?</strong><br>
+        Geometricamente, una derivada nula significa que la recta tangente es <strong>completamente horizontal</strong> (paralela al eje X).<br>
+        Al no cortar nunca al eje horizontal, es matematicamente imposible calcular el siguiente punto x<sub>${n+1}</sub> = x<sub>${n}</sub> - f(x<sub>${n}</sub>) / 0.<br><br>
+        <span class="text-warning">Recomendacion didactica:</span> Selecciona un valor de arranque x0 diferente, lejos de maximos o minimos locales.
+      `;
+
+      showErrorModal("FALLO: DERIVADA NULA f'(x) = 0", alertHtml);
+
+      document.getElementById('narrative-tag').className = 'narrative-badge bg-danger text-white';
+      document.getElementById('narrative-tag').innerText = `FALLO: RECTA TANGENTE HORIZONTAL`;
+      document.getElementById('narrative-content').innerHTML = `
+        <span class="text-danger"><strong>ALERTA DIDACTICA: PENDIENTE CERO</strong></span><br>
+        En x = ${xn.toFixed(4)}, f'(x) = 0. La recta tangente no intercepta el eje X.<br>
+        La formula se indetermina al dividir entre cero: x<sub>n+1</sub> = ${xn.toFixed(4)} - (${fxn.toFixed(4)} / 0) &rarr; Indefinido.
+      `;
+
+      finishExecution();
+    }
+
+    function autoPlayToggle() {
+      const btn = document.getElementById('btn-auto');
+      if (State.autoTimer) {
+        clearInterval(State.autoTimer);
+        State.autoTimer = null;
+        btn.innerText = 'AUTO';
+        btn.className = 'doom-btn doom-btn-green';
+      } else {
+        btn.innerText = 'DETENER';
+        btn.className = 'doom-btn doom-btn-primary';
+        State.autoTimer = setInterval(() => {
+          if (!State.isRunning || State.isConverged || State.isFailed) {
+            clearInterval(State.autoTimer);
+            State.autoTimer = null;
+            btn.innerText = 'AUTO';
+            btn.className = 'doom-btn doom-btn-green';
+          } else {
+            executeNextStep();
+          }
+        }, 800);
+      }
+    }
+
+    function finishExecution() {
+      if (State.autoTimer) {
+        clearInterval(State.autoTimer);
+        State.autoTimer = null;
+        document.getElementById('btn-auto').innerText = 'AUTO';
+        document.getElementById('btn-auto').className = 'doom-btn doom-btn-green';
+      }
+      document.getElementById('btn-next').disabled = true;
+      document.getElementById('btn-auto').disabled = true;
+      document.getElementById('btn-start').disabled = false;
+    }
+
+    function resetMission() {
+      finishExecution();
+      State.isRunning = false;
+      State.isConverged = false;
+      State.isFailed = false;
+      State.currentIter = 0;
+      State.history = [];
+
+      document.getElementById('app-container').classList.remove('victory-pulse');
+      document.getElementById('table-body').innerHTML = '';
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-next').disabled = true;
+      document.getElementById('btn-auto').disabled = true;
+
+      document.getElementById('hud-ammo-val').innerText = '00 / 15';
+      document.getElementById('hud-accuracy-val').innerText = '0.0%';
+      document.getElementById('hud-decimals-val').innerText = '0 DIGITOS';
+      document.getElementById('hud-root-val').innerText = 'A LA ESPERA';
+      document.getElementById('hud-state-val').innerText = 'STANDBY';
+      document.getElementById('hud-state-val').className = 'hud-block-value yellow';
+
+      document.getElementById('hud-error-pct').innerText = '---';
+      document.getElementById('doom-health-bar').style.width = '0%';
+
+      updateHUDOverlay(0, '---', '---', '---', '---');
+      setDoomguyMood('normal', 'LISTO');
+      renderMathFormulaStatic('x_{n+1} = x_n - \\frac{f(x_n)}{f\'(x_n)}');
+
+      document.getElementById('narrative-tag').className = 'narrative-badge';
+      document.getElementById('narrative-tag').innerText = 'INSTRUCCION TACTICA';
+      document.getElementById('step-counter-tag').innerText = 'PASO: 0';
+      document.getElementById('narrative-content').innerHTML = `
+        Sistema reiniciado. Haz clic sobre la curva para apuntar x<sub>0</sub> o configuralo en el panel, 
+        luego pulsa <strong>"[+] INICIAR ANALISIS"</strong>.
+      `;
+
+      initPlot();
+    }
+
+    function appendTableRow(item) {
+      const tbody = document.getElementById('table-body');
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('active-step'));
+
+      const tr = document.createElement('tr');
+      tr.className = 'active-step';
+      const errorText = isNaN(item.errorPct) ? '---' : item.errorPct.toFixed(4) + '%';
+
+      tr.innerHTML = `
+        <td class="text-warning">${item.n}</td>
+        <td>${item.xn.toFixed(5)}</td>
+        <td>${item.fxn.toFixed(5)}</td>
+        <td>${item.dfxn.toFixed(5)}</td>
+        <td class="text-warning fw-bold">${item.nextX.toFixed(5)}</td>
+        <td style="color: #ff9944;">${errorText} <span class="badge-digits">+${item.correctDecimals} dec</span></td>
+      `;
+
+      tbody.appendChild(tr);
+      const wrapper = document.querySelector('.doom-table-wrapper');
+      wrapper.scrollTop = wrapper.scrollHeight;
+    }
+
+    function updateHUDOverlay(iter, xn, fxn, dfxn, nextX) {
+      document.getElementById('hud-overlay-iter').innerText = iter;
+      document.getElementById('hud-overlay-xn').innerText = typeof xn === 'number' ? xn.toFixed(4) : xn;
+      document.getElementById('hud-overlay-fxn').innerText = typeof fxn === 'number' ? fxn.toFixed(4) : fxn;
+      document.getElementById('hud-overlay-dfxn').innerText = typeof dfxn === 'number' ? dfxn.toFixed(4) : dfxn;
+      document.getElementById('hud-overlay-nextx').innerText = typeof nextX === 'number' ? nextX.toFixed(4) : (nextX || '---');
+    }
+
+    function updateHUDValues(iter, nextX, dfxn, errorPct, correctDecimals) {
+      document.getElementById('hud-ammo-val').innerText = `${String(iter).padStart(2,'0')} / ${String(State.maxIter).padStart(2,'0')}`;
+      document.getElementById('hud-root-val').innerText = nextX.toFixed(5);
+      document.getElementById('hud-decimals-val').innerText = `${correctDecimals} DIGITOS`;
+
+      const accuracy = Math.max(0, Math.min(100, 100 - errorPct));
+      document.getElementById('hud-accuracy-val').innerText = accuracy.toFixed(1) + '%';
+      document.getElementById('hud-error-pct').innerText = errorPct.toFixed(4) + '%';
+      document.getElementById('doom-health-bar').style.width = accuracy + '%';
+    }
+
+    function setDoomguyMood(mood, text) {
+      const face = document.getElementById('doomguy-face');
+      const statusText = document.getElementById('doomguy-status-text');
+      statusText.innerText = text;
+
+      if (mood === 'god') {
+        face.style.filter = 'drop-shadow(0 0 6px #39ff14) brightness(1.2)';
+        statusText.className = 'text-success';
+      } else if (mood === 'hurt') {
+        face.style.filter = 'hue-rotate(300deg) brightness(0.9)';
+        statusText.className = 'text-warning';
+      } else if (mood === 'dead') {
+        face.style.filter = 'grayscale(100%) contrast(1.5)';
+        statusText.className = 'text-danger';
+      } else {
+        face.style.filter = 'none';
+        statusText.className = 'text-warning';
+      }
+    }
+
+    function showErrorModal(title, message) {
+      document.getElementById('modal-title').innerText = title;
+      document.getElementById('modal-body').innerHTML = message;
+      document.getElementById('doom-modal').style.display = 'flex';
+    }
+
+    document.getElementById('modal-btn-close').addEventListener('click', () => {
+      document.getElementById('doom-modal').style.display = 'none';
+    });
+
+    // Feature Sutil 4: Copiar reporte LaTeX al portapapeles
+    document.getElementById('btn-copy-latex').addEventListener('click', function() {
+      if (!State.history || State.history.length === 0) {
+        showErrorModal("Sin Datos de Iteracion", "Primero ejecuta al menos una iteracion para poder exportar la tabla.");
+        return;
+      }
+
+      let latex = "% Codigo LaTeX generado por Newton-Raphson: Root Slayer\n";
+      latex += "\\begin{table}[htbp]\n\\centering\n";
+      latex += `\\caption{Iteraciones de Newton-Raphson para $f(x) = ${State.fnStr}$}\n`;
+      latex += "\\begin{tabular}{|c|c|c|c|c|c|}\n\\hline\n";
+      latex += "$n$ & $x_n$ & $f(x_n)$ & $f'(x_n)$ & $x_{n+1}$ & Error (\\%) \\\\\n\\hline\n";
+      State.history.forEach(h => {
+        const err = isNaN(h.errorPct) ? "---" : h.errorPct.toFixed(4) + "\\%";
+        latex += `${h.n} & ${h.xn.toFixed(5)} & ${h.fxn.toFixed(5)} & ${h.dfxn.toFixed(5)} & ${h.nextX.toFixed(5)} & ${err} \\\\\n`;
+      });
+      latex += "\\hline\n\\end{tabular}\n\\end{table}";
+
+      navigator.clipboard.writeText(latex).then(() => {
+        const btn = document.getElementById('btn-copy-latex');
+        const prevText = btn.innerText;
+        btn.innerText = '[COPIADO!]';
+        btn.className = 'btn btn-sm py-0 px-2 btn-success';
+        setTimeout(() => {
+          btn.innerText = prevText;
+          btn.className = 'btn btn-sm py-0 px-2 btn-outline-warning';
+        }, 1500);
+      }).catch(() => {
+        showErrorModal("Error Portapapeles", "No se pudo acceder al portapapeles. Copia manualmente desde la consola.");
+        console.log(latex);
+      });
+    });
+
+    document.getElementById('preset-select').addEventListener('change', function() {
+      const val = this.value;
+      if (val === 'custom') return;
+      const preset = PRESETS[val];
+      if (preset) {
+        document.getElementById('input-fx').value = preset.f;
+        document.getElementById('input-dfx').value = preset.df;
+        document.getElementById('input-x0').value = preset.x0;
+        document.getElementById('input-tol').value = preset.tol;
+        resetMission();
+      }
+    });
+
+    document.getElementById('btn-start').addEventListener('click', startMission);
+    document.getElementById('btn-next').addEventListener('click', executeNextStep);
+    document.getElementById('btn-auto').addEventListener('click', autoPlayToggle);
+    document.getElementById('btn-reset').addEventListener('click', resetMission);
+    document.getElementById('btn-auto-diff').addEventListener('click', autoDifferentiate);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initPlot();
+      renderMathFormulaStatic('x_{n+1} = x_n - \\frac{f(x_n)}{f\'(x_n)}');
+    });
+
+    window.addEventListener('resize', () => {
+      Plotly.Plots.resize(document.getElementById('graph-container'));
+    });
+  </script>
+</body>
+</html>
